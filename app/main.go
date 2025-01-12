@@ -7,6 +7,7 @@ import (
 
 	"github.com/JuanGQCadavid/r-tree/app/core/domain"
 	"github.com/JuanGQCadavid/r-tree/app/core/mathstuff"
+	"github.com/JuanGQCadavid/r-tree/app/core/utils"
 )
 
 type RTree[T any] struct {
@@ -78,8 +79,16 @@ func (rtree *RTree[T]) ChooseLeaf(latLon *domain.LatLon, node *domain.Node[T]) *
 	return rtree.ChooseLeaf(latLon, node.Locations[nodeIndex].ChildPointer)
 }
 
-func (rtree *RTree[T]) adjustTree(l *domain.Node[T], ll *domain.Node[T]) {
+func (rtree *RTree[T]) AdjustTree(l *domain.Node[T], ll *domain.Node[T]) {
+	// Are we in the root?
 
+	// if l.Parent == nil {
+	// 	newRoot := &domain.Node[T]{
+	// 		Parent:    nil,
+	// 		Locations: make([]*domain.Location[T], 0, rtree.MaxValues),
+	// 	}
+	// 	ll_a, ll_b := mathstuff.MinSquare()
+	// }
 }
 
 func (rtree *RTree[T]) PickSeeds(entries []*domain.Location[T]) (*domain.Location[T], int, *domain.Location[T], int) {
@@ -109,28 +118,6 @@ func (rtree *RTree[T]) PickSeeds(entries []*domain.Location[T]) (*domain.Locatio
 	}
 
 	return LimitA, aI, LimitB, bI
-}
-
-func deleteElements[T any](slice []*domain.Location[T], index ...int) []*domain.Location[T] {
-	result := make([]*domain.Location[T], len(slice)-len(index))
-	counter := 0
-
-	for i := range slice {
-		toAdd := true
-
-		for _, v := range index {
-			if v == i {
-				toAdd = false
-				break
-			}
-		}
-
-		if toAdd {
-			result[counter] = slice[i]
-			counter++
-		}
-	}
-	return result
 }
 
 func (rtree *RTree[T]) PickNext(origin, l_1, l_2 []*domain.Location[T]) ([]*domain.Location[T], []*domain.Location[T], []*domain.Location[T]) {
@@ -183,7 +170,7 @@ func (rtree *RTree[T]) PickNext(origin, l_1, l_2 []*domain.Location[T]) ([]*doma
 		l_2 = append(l_2, origin[nextIndex])
 	}
 
-	origin = deleteElements(origin, nextIndex)
+	origin = utils.DeleteElements(origin, nextIndex)
 
 	return origin, l_1, l_2
 }
@@ -203,7 +190,7 @@ func (rtree *RTree[T]) SplitNodeQuadraticCost(newLocation *domain.Location[T], l
 	l_2 = append(l_2, b)
 
 	// Removing seeds
-	totalEntries = deleteElements(totalEntries, aI, bI)
+	totalEntries = utils.DeleteElements(totalEntries, aI, bI)
 
 	// for _, v := range totalEntries {
 	// 	fmt.Print(v.Value, ", ")
@@ -243,15 +230,6 @@ func (rtree *RTree[T]) SplitNodeQuadraticCost(newLocation *domain.Location[T], l
 		}
 }
 
-// func (rtree *RTree[T]) splitNode(latLon *domain.LatLon, value T, l *domain.Node[T]) (*domain.Node[T], *domain.Node[T]) {
-// 	ll := &domain.Node[T]{
-// 		Parent:    nil,
-// 		Locations: make([]*domain.Location[T], 0, rtree.MaxValues),
-// 	}
-
-// 	return nil, nil
-// }
-
 func (rtree *RTree[T]) InsertLocation(latLon *domain.LatLon, value T, node *domain.Node[T]) {
 	l := rtree.ChooseLeaf(latLon, node)
 
@@ -268,7 +246,7 @@ func (rtree *RTree[T]) InsertLocation(latLon *domain.LatLon, value T, node *doma
 			LimitA: latLon,
 			LimitB: latLon,
 		}, node)
-		rtree.adjustTree(l, ll)
+		rtree.AdjustTree(l, ll)
 	}
 }
 

@@ -69,14 +69,14 @@ func NewCoords(limitA, limitB, newPoint *domain.LatLon) (*domain.LatLon, *domain
 // New cords calculte the coordinates that will encompas the new point.
 // Returns the A,B new limits, with the delta of the new area added and the total area
 func NewCoordsV2[T any](limitA, limitB, newPoint *domain.Location[T]) (*domain.LatLon, *domain.LatLon, float64, float64) {
-	lmtA, lmtB := MinSquare(limitA, limitB)
-	newLimitA, newLimitB := MinSquare(&domain.Location[T]{
+	lmtA, lmtB := MinSquare[T](limitA, limitB)
+	newLimitA, newLimitB := MinSquare[T](&domain.Location[T]{
 		LimitA: lmtA,
 		LimitB: lmtB,
 	}, newPoint)
 
 	newArea := CalculateArea(newLimitA, newLimitB)
-	oldArea := CalculateAreaV2(limitA, limitB)
+	oldArea := CalculateAreaV2[T](limitA, limitB)
 
 	return newLimitA, newLimitB, newArea - oldArea, newArea
 }
@@ -108,6 +108,26 @@ func MinSquare[T any](limitA, limitB *domain.Location[T]) (*domain.LatLon, *doma
 }
 
 func CalculateAreaV2[T any](limitA, limitB *domain.Location[T]) float64 {
-	lmtA, lmtB := MinSquare(limitA, limitB)
+	lmtA, lmtB := MinSquare[T](limitA, limitB)
 	return math.Abs(lmtA.Lat-lmtB.Lat) * math.Abs(lmtA.Lon-lmtB.Lon)
+}
+
+func GetMRB[T any](node *domain.Node[T]) (*domain.LatLon, *domain.LatLon) {
+	if len(node.Locations) == 0 {
+		return nil, nil
+	}
+
+	var (
+		l_1_coords = node.Locations[0]
+	)
+
+	for i := 1; i < len(node.Locations); i++ {
+		a, b := MinSquare[T](node.Locations[i], l_1_coords)
+		l_1_coords = &domain.Location[T]{
+			LimitA: a,
+			LimitB: b,
+		}
+	}
+
+	return l_1_coords.LimitA, l_1_coords.LimitB
 }
