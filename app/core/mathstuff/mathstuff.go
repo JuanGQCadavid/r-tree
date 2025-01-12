@@ -65,3 +65,49 @@ func NewCoords(limitA, limitB, newPoint *domain.LatLon) (*domain.LatLon, *domain
 
 	return newLimitA, newLimitB, newArea - oldArea, newArea
 }
+
+// New cords calculte the coordinates that will encompas the new point.
+// Returns the A,B new limits, with the delta of the new area added and the total area
+func NewCoordsV2[T any](limitA, limitB, newPoint *domain.Location[T]) (*domain.LatLon, *domain.LatLon, float64, float64) {
+	lmtA, lmtB := MinSquare(limitA, limitB)
+	newLimitA, newLimitB := MinSquare(&domain.Location[T]{
+		LimitA: lmtA,
+		LimitB: lmtB,
+	}, newPoint)
+
+	newArea := CalculateArea(newLimitA, newLimitB)
+	oldArea := CalculateAreaV2(limitA, limitB)
+
+	return newLimitA, newLimitB, newArea - oldArea, newArea
+}
+
+func MinSquare[T any](limitA, limitB *domain.Location[T]) (*domain.LatLon, *domain.LatLon) {
+	minALat := math.Min(limitA.LimitA.Lat, limitA.LimitB.Lat)
+	minBLat := math.Min(limitB.LimitA.Lat, limitB.LimitB.Lat)
+	minABLat := math.Min(minALat, minBLat)
+
+	minALon := math.Min(limitA.LimitA.Lon, limitA.LimitB.Lon)
+	minBLon := math.Min(limitB.LimitA.Lon, limitB.LimitB.Lon)
+	minABLon := math.Min(minALon, minBLon)
+
+	maxALon := math.Max(limitA.LimitA.Lon, limitA.LimitB.Lon)
+	maxBLon := math.Max(limitB.LimitA.Lon, limitB.LimitB.Lon)
+	maxABLon := math.Max(maxALon, maxBLon)
+
+	maxALat := math.Max(limitA.LimitA.Lat, limitA.LimitB.Lat)
+	maxBLat := math.Max(limitB.LimitA.Lat, limitB.LimitB.Lat)
+	maxABLat := math.Max(maxALat, maxBLat)
+
+	return &domain.LatLon{
+			Lat: minABLat,
+			Lon: minABLon,
+		}, &domain.LatLon{
+			Lat: maxABLon,
+			Lon: maxABLat,
+		}
+}
+
+func CalculateAreaV2[T any](limitA, limitB *domain.Location[T]) float64 {
+	lmtA, lmtB := MinSquare(limitA, limitB)
+	return math.Abs(lmtA.Lat-lmtB.Lat) * math.Abs(lmtA.Lon-lmtB.Lon)
+}
