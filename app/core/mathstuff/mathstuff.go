@@ -112,17 +112,27 @@ func CalculateAreaV2[T any](limitA, limitB *domain.Location[T]) float64 {
 	return math.Abs(lmtA.Lat-lmtB.Lat) * math.Abs(lmtA.Lon-lmtB.Lon)
 }
 
-func GetMRB[T any](node *domain.Node[T]) (*domain.LatLon, *domain.LatLon) {
-	if len(node.Locations) == 0 {
+func IsPointCovered[T any](loc *domain.Location[T], point *domain.LatLon) bool {
+	if loc.LimitA.Lat <= point.Lat && point.Lat <= loc.LimitB.Lat {
+		if loc.LimitA.Lon <= point.Lon && point.Lon <= loc.LimitB.Lon {
+			return true
+		}
+	}
+
+	return false
+}
+
+func GetMRB[T any](node []*domain.Location[T]) (*domain.LatLon, *domain.LatLon) {
+	if len(node) == 0 {
 		return nil, nil
 	}
 
 	var (
-		l_1_coords = node.Locations[0]
+		l_1_coords = node[0]
 	)
 
-	for i := 1; i < len(node.Locations); i++ {
-		a, b := MinSquare[T](node.Locations[i], l_1_coords)
+	for i := 1; i < len(node); i++ {
+		a, b := MinSquare[T](node[i], l_1_coords)
 		l_1_coords = &domain.Location[T]{
 			LimitA: a,
 			LimitB: b,

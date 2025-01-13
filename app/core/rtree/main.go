@@ -1,7 +1,8 @@
-package main
+package rtree
 
 import (
 	"fmt"
+	"log"
 	"math"
 	"strings"
 
@@ -41,13 +42,14 @@ func traverseNode[T any](node *domain.Node[T], level int) {
 }
 
 func NewRTree[T any](valuesPerNode int) *RTree[T] {
+
 	return &RTree[T]{
 		Root: &domain.Node[T]{
 			Parent:    nil,
 			Locations: make([]*domain.Location[T], 0, valuesPerNode),
 		},
 		MaxValues: valuesPerNode,
-		MinValues: valuesPerNode / 2,
+		MinValues: int(math.Ceil(float64(valuesPerNode) / 2)),
 	}
 }
 
@@ -82,13 +84,46 @@ func (rtree *RTree[T]) ChooseLeaf(latLon *domain.LatLon, node *domain.Node[T]) *
 func (rtree *RTree[T]) AdjustTree(l *domain.Node[T], ll *domain.Node[T]) {
 	// Are we in the root?
 
-	// if l.Parent == nil {
-	// 	newRoot := &domain.Node[T]{
-	// 		Parent:    nil,
-	// 		Locations: make([]*domain.Location[T], 0, rtree.MaxValues),
-	// 	}
-	// 	ll_a, ll_b := mathstuff.MinSquare()
-	// }
+	if l.Parent == nil {
+		newRoot := &domain.Node[T]{
+			Parent:    nil,
+			Locations: make([]*domain.Location[T], 0),
+		}
+		l_a, l_b := mathstuff.GetMRB(l.Locations)
+		ll_a, ll_b := mathstuff.GetMRB(ll.Locations)
+
+		newRoot.Locations = append(newRoot.Locations, &domain.Location[T]{
+			ChildPointer: l,
+			LimitA:       l_a,
+			LimitB:       l_b,
+		}, &domain.Location[T]{
+			ChildPointer: ll,
+			LimitA:       ll_a,
+			LimitB:       ll_b,
+		})
+
+		l.Parent = newRoot
+		ll.Parent = newRoot
+		rtree.Root = newRoot
+		return
+	}
+
+	// Not root, then, could we added it without conflict?
+	parent := l.Parent
+	ll_a, ll_b := mathstuff.GetMRB(ll.Locations)
+	parent.Locations = append(parent.Locations, &domain.Location[T]{
+		ChildPointer: ll,
+		LimitA:       ll_a,
+		LimitB:       ll_b,
+	})
+
+	// Update the MBR of the parent node
+	parent.UpdateMBR()
+
+	if len(parent.Locations) > rtree.MaxValues {
+		newParent, siblingParent := rtree.SplitNodeQuadraticCost(parent)
+		rtree.AdjustTree(newParent, siblingParent)
+	}
 }
 
 func (rtree *RTree[T]) PickSeeds(entries []*domain.Location[T]) (*domain.Location[T], int, *domain.Location[T], int) {
@@ -127,29 +162,23 @@ func (rtree *RTree[T]) PickNext(origin, l_1, l_2 []*domain.Location[T]) ([]*doma
 		minArea   = math.Inf(0)
 		to_l_1    = true
 
-		l_1_coords = l_1[0]
-		l_2_coords = l_1[0]
-	)
+		l_1A, l_1B = mathstuff.GetMRB(l_1)
+		l_2A, l_2B = mathstuff.GetMRB(l_2)
 
-	for i := 1; i < len(l_1); i++ {
-		a, b := mathstuff.MinSquare(l_1[i], l_1_coords)
 		l_1_coords = &domain.Location[T]{
-			LimitA: a,
-			LimitB: b,
+			LimitA: l_1A,
+			LimitB: l_1B,
 		}
-	}
 
-	for i := 1; i < len(l_2); i++ {
-		a, b := mathstuff.MinSquare(l_2[i], l_2_coords)
 		l_2_coords = &domain.Location[T]{
-			LimitA: a,
-			LimitB: b,
+			LimitA: l_2A,
+			LimitB: l_2B,
 		}
-	}
+	)
 
 	for i, v := range origin {
 		l_1_area := mathstuff.CalculateArea(mathstuff.MinSquare(l_1_coords, v))
-		l_2_area := mathstuff.CalculateArea(mathstuff.MinSquare(l_1_coords, v))
+		l_2_area := mathstuff.CalculateArea(mathstuff.MinSquare(l_2_coords, v))
 
 		if l_1_area < minArea {
 			nextIndex = i
@@ -175,14 +204,12 @@ func (rtree *RTree[T]) PickNext(origin, l_1, l_2 []*domain.Location[T]) ([]*doma
 	return origin, l_1, l_2
 }
 
-func (rtree *RTree[T]) SplitNodeQuadraticCost(newLocation *domain.Location[T], l *domain.Node[T]) (*domain.Node[T], *domain.Node[T]) {
+func (rtree *RTree[T]) SplitNodeQuadraticCost(l *domain.Node[T]) (*domain.Node[T], *domain.Node[T]) {
 
-	l_1 := make([]*domain.Location[T], 0, rtree.MaxValues)
-	l_2 := make([]*domain.Location[T], 0, rtree.MaxValues)
+	l_1 := make([]*domain.Location[T], 0)
+	l_2 := make([]*domain.Location[T], 0)
 
-	totalEntries := make([]*domain.Location[T], 0)
-	totalEntries = append(totalEntries, l.Locations...)
-	totalEntries = append(totalEntries, newLocation)
+	totalEntries := l.Locations
 
 	// Selecting seeds
 	a, aI, b, bI := rtree.PickSeeds(totalEntries)
@@ -191,34 +218,19 @@ func (rtree *RTree[T]) SplitNodeQuadraticCost(newLocation *domain.Location[T], l
 
 	// Removing seeds
 	totalEntries = utils.DeleteElements(totalEntries, aI, bI)
-
-	// for _, v := range totalEntries {
-	// 	fmt.Print(v.Value, ", ")
-	// }
-	// fmt.Println()
-
-	// log.Println("----- start -----")
 	for len(totalEntries) > 0 {
 		totalEntries, l_1, l_2 = rtree.PickNext(totalEntries, l_1, l_2)
-		// log.Println("a: ", a.Value)
-		// log.Println("b: ", b.Value)
-
-		// for _, v := range totalEntries {
-		// 	fmt.Print(v.Value, ", ")
-		// }
-		// fmt.Println()
-		// log.Println("----")
 	}
 
 	// Balancing, the last three elements are the ones with bigger areas.
-	if len(l_1) > 3 {
-		l_2 = append(l_2, l_1[3:]...)
-		l_1 = l_1[0:3]
+	if len(l_1) > rtree.MinValues {
+		l_2 = append(l_2, l_1[rtree.MinValues:]...)
+		l_1 = l_1[0:rtree.MinValues]
 	}
 
-	if len(l_2) > 3 {
-		l_1 = append(l_1, l_2[3:]...)
-		l_2 = l_2[0:3]
+	if len(l_2) > rtree.MinValues {
+		l_1 = append(l_1, l_2[rtree.MinValues:]...)
+		l_2 = l_2[0:rtree.MinValues]
 	}
 
 	return &domain.Node[T]{
@@ -233,23 +245,63 @@ func (rtree *RTree[T]) SplitNodeQuadraticCost(newLocation *domain.Location[T], l
 func (rtree *RTree[T]) InsertLocation(latLon *domain.LatLon, value T, node *domain.Node[T]) {
 	l := rtree.ChooseLeaf(latLon, node)
 
-	if len(l.Locations) < cap(l.Locations) {
-		l.Locations = append(l.Locations, &domain.Location[T]{
-			Value:        value,
-			ChildPointer: nil,
-			LimitA:       latLon,
-			LimitB:       latLon,
-		})
-	} else {
-		l, ll := rtree.SplitNodeQuadraticCost(&domain.Location[T]{
-			Value:  value,
-			LimitA: latLon,
-			LimitB: latLon,
-		}, node)
-		rtree.AdjustTree(l, ll)
+	l.Locations = append(l.Locations, &domain.Location[T]{
+		Value:        value,
+		ChildPointer: nil,
+		LimitA:       latLon,
+		LimitB:       latLon,
+	})
+
+	if l.Parent != nil {
+		l.Parent.UpdateMBR()
+	}
+
+	if len(l.Locations) > rtree.MaxValues {
+		log.Printf("Okey.. we insert more than the possible for %v \n", value)
+		l_1, l_2 := rtree.SplitNodeQuadraticCost(l)
+
+		l.Locations = l_1.Locations
+		l.Parent = l_1.Parent
+		l.UpdateMBR()
+		rtree.AdjustTree(l, l_2)
 	}
 }
 
-func main() {
+func (rtree *RTree[T]) Search(point *domain.LatLon, node *domain.Node[T]) []*domain.Location[T] {
+	if node.IsLeaf() {
+		return node.Locations
+	}
 
+	// Plan A - Lit, preciso
+	for _, val := range node.Locations {
+		if mathstuff.IsPointCovered(val, point) {
+			return rtree.Search(point, val.ChildPointer)
+		}
+	}
+
+	// Plan B In range - Area
+
+	var (
+		minAreaIndex = 0
+		minArea      = math.Inf(0)
+	)
+
+	for i, val := range node.Locations {
+		areaBefore := mathstuff.CalculateAreaV2(val, val)
+		areaAfter := mathstuff.CalculateAreaV2(val, &domain.Location[T]{
+			LimitA: point,
+			LimitB: point,
+		})
+
+		delta := math.Abs(areaBefore - areaAfter)
+
+		if delta < minArea {
+			minArea = delta
+			minAreaIndex = i
+		}
+	}
+
+	return rtree.Search(point, node.Locations[minAreaIndex].ChildPointer)
+
+	// return nil
 }
